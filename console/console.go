@@ -186,9 +186,9 @@ func (f *Factorio) Run() error {
 				} else if m := regexpLogMessage.FindStringSubmatch(c.Data); m != nil {
 					col := colorNotice
 					if strings.HasPrefix(m[2], "Info ") {
-						col := colorStdout
+						col = colorStdout
 					} else if strings.HasPrefix(m[2], "Error") {
-						col := colorWarn
+						col = colorWarn
 					}
 					consoleWrite(f.console.Stdout(), c.Data, col)
 				} else {
