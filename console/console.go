@@ -133,16 +133,6 @@ func (f *Factorio) Run() error {
 	})
 	defer closeConsole()
 
-	ourOutputBroken := false
-
-	consoleWrite := func(w io.Writer, s string, c *color.Color) {
-		err = fullyWrite(w, c.SprintlnFunc()(s))
-		if err != nil {
-			fmt.Println("output pipe broken", err)
-			ourOutputBroken = true
-		}
-	}
-
 	err = f.process.Start()
 	if err != nil {
 		return errors.Wrap(err, "starting Factorio process")
@@ -153,16 +143,29 @@ func (f *Factorio) Run() error {
 	go f.runStdout(f.stderr)
 	go f.runStdin()
 
-	hadCtrlC := false
 	processExited := false
 	didExit := waitForExit(f.process.Process)
+	ourOutputBroken := false
 
 	colorStdout := color.New(color.FgWhite)
 	colorNotice := color.New(color.FgHiWhite)
+	colorDebug := color.New(color.FgHiBlack)
 	colorChat := color.New(color.FgHiBlue)
 	colorCommand := color.New(color.FgMagenta)
 	colorWarn := color.New(color.FgYellow)
-	colorStderr := color.New(color.FgRed)
+	colorStderr := color.New(color.FgHiRed)
+
+	consoleWrite := func(w io.Writer, s string, c *color.Color) {
+		err = fullyWrite(w, c.SprintlnFunc()(s))
+		if err != nil {
+			fmt.Println("output pipe broken", err)
+			ourOutputBroken = true
+		}
+	}
+
+	debugWrite := func(v ...interface{}) {
+		fmt.Print(colorDebug.SprintlnFunc()(v...))
+	}
 
 	for !processExited {
 		select {
@@ -197,31 +200,26 @@ func (f *Factorio) Run() error {
 			case controlMessageStderr:
 				consoleWrite(f.console.Stderr(), c.Data, colorStderr)
 			case controlMessageInput:
-				hadCtrlC = false
 				err = f.sendCommand(c.Data)
 				if err != nil {
-					fmt.Println("error sending to stdin:", err)
-					fmt.Println("did process exit?")
+					debugWrite("error sending to stdin:", err)
+					debugWrite("did process exit?")
 				}
 			case controlMessageInputErr:
 				if c.Extra == readline.ErrInterrupt || c.Extra == io.EOF {
-					if hadCtrlC {
-						go f.StopServer()
-					} else {
-						consoleWrite(f.console.Stderr(), "Caught ^C. Use 'stop' or ^C again to halt the server.", colorWarn)
-						hadCtrlC = true
-					}
+					go f.StopServer()
+					consoleWrite(f.console.Stderr(), "Caught ^C. Halting the server.", colorWarn)
 				} else if c.Extra == errInputProbablyBroken {
+					go f.StopServer()
 					consoleWrite(f.console.Stderr(), "Exiting", colorWarn)
 					closeConsole()
-					go f.StopServer()
 				}
 			case controlMessageOutputErr:
 				err = c.Extra
-				fmt.Println("output error:", err)
-				fmt.Println("did process exit?")
+				debugWrite("output error:", err)
+				debugWrite("did process exit?")
 			default:
-				fmt.Println("unknown cmsg id", c)
+				debugWrite("unknown cmsg id", c)
 			}
 		case r := <-f.rpcChan:
 			// TODO
@@ -236,8 +234,8 @@ func (f *Factorio) Run() error {
 	// Drain stdout, stderr
 	drainDone := make(chan struct{})
 	go func() {
-		fmt.Println("draining lineChan")
-		defer fmt.Println("drain done")
+		debugWrite("draining lineChan")
+		defer debugWrite("drain done")
 		for {
 			select {
 			case c := <-f.lineChan:
@@ -247,7 +245,7 @@ func (f *Factorio) Run() error {
 				case controlMessageStderr:
 					consoleWrite(f.console.Stderr(), c.Data, colorStderr)
 				default:
-					fmt.Printf("unexpected drain message: %T %#v\n", c, c)
+					debugWrite("unexpected drain message: %T %#v\n", c, c)
 				case controlInvalid:
 					// zero read on closed channel
 					return
@@ -262,23 +260,22 @@ func (f *Factorio) Run() error {
 	time.Sleep(200 * time.Millisecond)
 
 	// Signal to goroutines to exit
-	fmt.Println("closing stopChan")
+	debugWrite("closing stopChan")
 	close(f.stopChan)
 
 	// interrupt input reader by calling Close()
-	fmt.Println("closing console")
+	debugWrite("closing console")
 	closeConsole()
 
 	// Wait for goroutines to exit
-	fmt.Println("wg.Wait")
+	debugWrite("wg.Wait")
 	f.stopWg.Wait()
 	close(drainDone)
 	close(f.lineChan)
 
 	// Fetch process return code, don't leave zombies
-	fmt.Println("collecting return code")
-	fmt.Println(f.process.Wait())
-	return nil
+	debugWrite("collecting return code")
+	return f.process.Wait()
 }
 
 // StopServer closes the factorio binary's stdin and sends it a SIGINT.
