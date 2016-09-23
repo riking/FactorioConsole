@@ -229,11 +229,9 @@ func (f *Factorio) Run() error {
 					fmt.Printf("unexpected drain message: %T %#v\n", c, c)
 				case controlInvalid:
 					// zero read on closed channel
-					fmt.Println("linechan drain done")
 					return
 				}
 			case <-drainDone:
-				fmt.Println("linechan drain done")
 				return
 			}
 		}
