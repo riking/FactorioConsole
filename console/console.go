@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -170,7 +171,7 @@ func (f *Factorio) Run() error {
 			switch c.ID {
 			case controlMessageStdout:
 				if regexpChatMessage.MatchString(c.Data) {
-					consoleWrite(f.console.Stdout(), c.Data, colorPlain)
+					consoleWrite(f.console.Stdout(), c.Data, colorChat)
 				} else {
 					consoleWrite(f.console.Stdout(), c.Data, colorStdout)
 				}
