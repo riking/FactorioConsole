@@ -121,6 +121,7 @@ func (f *Factorio) Setup(c *Config) error {
 
 var regexpChatMessage = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d\d:\d\d:\d\d) \[(\w+)\] (.*)$`)
 var regexpLogMessage = regexp.MustCompile(`^([ \d]+\.\d{3}) (.*)$`)
+var regexpLoadingMod = regexp.MustCompile(`Loading mod ([a-zA-Z0-9 _-]+) (\d+\.\d+\.\d+) \((\w+\.lua)\)`)
 
 func (f *Factorio) Run() error {
 	var err error
@@ -149,9 +150,11 @@ func (f *Factorio) Run() error {
 
 	colorStdout := color.New(color.FgWhite)
 	colorNotice := color.New(color.FgHiWhite)
+	colorBoldNotice := color.New(color.FgHiWhite, color.Bold)
 	colorDebug := color.New(color.FgHiBlack)
 	colorChat := color.New(color.FgHiBlue)
 	colorCommand := color.New(color.FgMagenta)
+	colorGreen := color.New(color.FgGreen)
 	colorWarn := color.New(color.FgYellow)
 	colorStderr := color.New(color.FgHiRed)
 
@@ -187,13 +190,25 @@ func (f *Factorio) Run() error {
 					}
 					consoleWrite(f.console.Stdout(), c.Data, col)
 				} else if m := regexpLogMessage.FindStringSubmatch(c.Data); m != nil {
+					str := c.Data
 					col := colorNotice
 					if strings.HasPrefix(m[2], "Info ") {
 						col = colorStdout
 					} else if strings.HasPrefix(m[2], "Error") {
 						col = colorWarn
+					} else if strings.HasPrefix(m[2], "Checksum for") {
+						col = colorDebug
+					} else if strings.HasPrefix(m[2], "Hosting game at") {
+						col = colorBoldNotice
+					} else if m2 := regexpLoadingMod.FindStringSubmatch(m[2]); m != nil {
+						col = colorStdout
+						str = fmt.Sprintf("Loading mod %s %s (%s)",
+							colorGreen.Sprint(m2[1]),
+							colorBoldNotice.Sprint(m2[2]),
+							colorDebug.Sprint(m2[3]),
+						)
 					}
-					consoleWrite(f.console.Stdout(), c.Data, col)
+					consoleWrite(f.console.Stdout(), str, col)
 				} else {
 					consoleWrite(f.console.Stdout(), c.Data, colorStdout)
 				}
