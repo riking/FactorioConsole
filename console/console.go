@@ -289,6 +289,10 @@ func (f *Factorio) sendCommand(cmd string) error {
 	return fullyWrite(f.stdin, cmd)
 }
 
+func (f *Factorio) debugWrite(v ...interface{}) {
+	fmt.Print(color.New(color.FgHiBlack).SprintlnFunc()(v...))
+}
+
 func fullyWrite(w io.Writer, s string) error {
 	b := []byte(s)
 	lenLeft := len(s)
@@ -307,7 +311,7 @@ func fullyWrite(w io.Writer, s string) error {
 // runStdout owns f.stdout and f.stderr
 func (f *Factorio) runStdout(r io.ReadCloser) {
 	defer f.stopWg.Done()
-	defer fmt.Println("runStdout returning")
+	defer f.debugWrite("runStdout returning")
 
 	outReadCh, outResumeCh, outErrCh := readToChannel(r)
 	var idMsg int
@@ -334,7 +338,7 @@ func (f *Factorio) runStdout(r io.ReadCloser) {
 // runStdin owns os.Stdin (which is f.console)
 func (f *Factorio) runStdin() {
 	defer f.stopWg.Done()
-	defer fmt.Println("runStdin returning")
+	defer f.debugWrite("runStdin returning")
 
 	ch := readlineToChannel(f.console, f.stopChan)
 	for {
@@ -367,7 +371,6 @@ func readToChannel(r io.Reader) (bytesCh <-chan []byte, resumeCh chan<- struct{}
 	resumeChan := make(chan struct{})
 	errChan := make(chan error)
 	go func(r io.Reader) {
-		defer fmt.Println("readToChannel returning")
 		s := bufio.NewScanner(r)
 		for s.Scan() {
 			readChan <- s.Bytes()
@@ -388,7 +391,6 @@ func readlineToChannel(r *readline.Instance, stop chan struct{}) chan control {
 	ch := make(chan control)
 
 	go func(r *readline.Instance) {
-		defer fmt.Println("readlineToChannel returning")
 		eofCount := 0
 		for {
 			str, err := r.Readline()

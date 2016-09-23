@@ -20,7 +20,9 @@ func waitForExit(p *os.Process) chan struct{} {
 	pr := internal.Process{Pid: p.Pid}
 	go func() {
 		b, err := pr.BlockUntilWaitable()
-		fmt.Println("blockUntilWaitable:", b, err)
+		if err != nil {
+			fmt.Println("blockUntilWaitable:", b, err)
+		}
 		close(ch)
 	}()
 	return ch
