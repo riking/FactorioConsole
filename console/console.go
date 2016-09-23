@@ -272,6 +272,7 @@ func (f *Factorio) runStdin() {
 		select {
 		case f.lineChan <- <-ch:
 		case <-f.stopChan:
+			return
 		}
 	}
 }
