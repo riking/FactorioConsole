@@ -130,9 +130,8 @@ func (f *Factorio) Run() error {
 
 	ourOutputBroken := false
 
-	consoleWrite := func(w io.Writer, s string) {
-		s = strings.TrimRight(s, "\n") + "\n"
-		err = fullyWrite(w, s)
+	consoleWrite := func(w io.Writer, s string, c *color.Color) {
+		err = fullyWrite(w, c.SprintlnFunc()(s))
 		if err != nil {
 			fmt.Println("output pipe broken")
 			ourOutputBroken = true
@@ -143,29 +142,38 @@ func (f *Factorio) Run() error {
 	if err != nil {
 		return errors.Wrap(err, "starting Factorio process")
 	}
-	processExited := false
 
 	f.stopWg.Add(2)
 	go f.runStdout()
 	go f.runStdin()
 
 	hadCtrlC := false
+	processExited := false
+	didExit := waitForExit(f.process.Process)
+
+	colorStdout := color.New(color.FgHiWhite)
+	colorStatus := color.New(color.FgWhite)
+	colorWarn := color.New(color.FgYellow)
+	colorStderr := color.New(color.FgRed)
 
 	for !processExited {
 		select {
+		case <-didExit:
+			// TODO timestamp?
+			consoleWrite(f.console.Stderr(), "Factorio server exited", colorStatus)
+			processExited = true
 		case c := <-f.lineChan:
 			switch c.ID {
 			case controlMessageStdout:
-				consoleWrite(f.console.Stdout(), color.WhiteString(c.Data))
+				consoleWrite(f.console.Stdout(), c.Data, colorStdout)
 			case controlMessageStderr:
-				consoleWrite(f.console.Stderr(), color.RedString(c.Data))
+				consoleWrite(f.console.Stderr(), c.Data, colorStderr)
 			case controlMessageInput:
 				hadCtrlC = false
 				err = f.sendCommand(c.Data)
 				if err != nil {
-					fmt.Println("error sending to stdin")
-					fmt.Println("marking process as exited")
-					processExited = true
+					fmt.Println("error sending to stdin:", err)
+					fmt.Println("did process exit?")
 				}
 			case controlMessageInputErr:
 				// TODO verify
@@ -173,23 +181,22 @@ func (f *Factorio) Run() error {
 					if hadCtrlC {
 						go f.StopServer()
 					} else {
-						consoleWrite(f.console.Stderr(), color.YellowString("Use 'stop' or ^C again to halt the server.\n"))
+						consoleWrite(f.console.Stderr(), "Use 'stop' or ^C again to halt the server.\n", colorWarn)
 						hadCtrlC = true
 					}
 				} else if c.Extra == io.EOF {
-					consoleWrite(f.console.Stderr(), color.YellowString("got EOF, ignoring\n"))
+					consoleWrite(f.console.Stderr(), "got EOF, ignoring\n", colorWarn)
 					// TODO verify
 					// ignore
 				} else if c.Extra == errInputProbablyBroken {
-					consoleWrite(f.console.Stderr(), color.YellowString("Exiting\n"))
+					consoleWrite(f.console.Stderr(), "Exiting\n", colorWarn)
 					closeConsole()
 					go f.StopServer()
 				}
 			case controlMessageOutputErr:
 				err = c.Extra
 				fmt.Println("output error:", err)
-				fmt.Println("marking process as exited")
-				processExited = true
+				fmt.Println("did process exit?")
 			}
 		case r := <-f.rpcChan:
 			// TODO
@@ -215,9 +222,9 @@ func (f *Factorio) Run() error {
 			case c := <-f.lineChan:
 				switch c.ID {
 				case controlMessageStdout:
-					consoleWrite(f.console.Stdout(), color.WhiteString(c.Data))
+					consoleWrite(f.console.Stdout(), c.Data, colorStdout)
 				case controlMessageStderr:
-					consoleWrite(f.console.Stderr(), color.RedString(c.Data))
+					consoleWrite(f.console.Stderr(), c.Data, colorStderr)
 				default:
 					fmt.Println("unexpected drain message", c)
 				}
