@@ -82,6 +82,18 @@ const (
 	controlMessageOutputErr
 )
 
+var (
+	colorStdout     = color.New(color.FgWhite)
+	colorNotice     = color.New(color.FgHiWhite)
+	colorBoldNotice = color.New(color.FgHiWhite, color.Bold)
+	colorDebug      = color.New(color.FgHiBlack)
+	colorChat       = color.New(color.FgHiBlue)
+	colorCommand    = color.New(color.FgMagenta)
+	colorGreen      = color.New(color.FgGreen)
+	colorWarn       = color.New(color.FgYellow)
+	colorStderr     = color.New(color.FgHiRed)
+)
+
 var errInputProbablyBroken = errors.Errorf("got multiple io.EOFs in row")
 
 const programName = `bin/x64/factorio`
@@ -122,6 +134,7 @@ func (f *Factorio) Setup(c *Config) error {
 var regexpChatMessage = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d\d:\d\d:\d\d) \[(\w+)\] (.*)$`)
 var regexpLogMessage = regexp.MustCompile(`^([ \d]+\.\d{3}) (.*)$`)
 var regexpLoadingMod = regexp.MustCompile(`Loading mod ([a-zA-Z0-9 _-]+) (\d+\.\d+\.\d+) \(([\w_-]+\.lua)\)`)
+var regexpMpManager = regexp.MustCompile(`Info MultiplayerManager.cpp:(\d+): (.*)$`)
 
 func (f *Factorio) Run() error {
 	var err error
@@ -147,16 +160,6 @@ func (f *Factorio) Run() error {
 	processExited := false
 	didExit := waitForExit(f.process.Process)
 	ourOutputBroken := false
-
-	colorStdout := color.New(color.FgWhite)
-	colorNotice := color.New(color.FgHiWhite)
-	colorBoldNotice := color.New(color.FgHiWhite, color.Bold)
-	colorDebug := color.New(color.FgHiBlack)
-	colorChat := color.New(color.FgHiBlue)
-	colorCommand := color.New(color.FgMagenta)
-	colorGreen := color.New(color.FgGreen)
-	colorWarn := color.New(color.FgYellow)
-	colorStderr := color.New(color.FgHiRed)
 
 	consoleWrite := func(w io.Writer, s string, c *color.Color) {
 		err = fullyWrite(w, c.SprintlnFunc()(s))
@@ -192,7 +195,10 @@ func (f *Factorio) Run() error {
 				} else if m := regexpLogMessage.FindStringSubmatch(c.Data); m != nil {
 					str := c.Data
 					col := colorNotice
-					if strings.HasPrefix(m[2], "Info ") {
+					if m2 := regexpMpManager.FindStringSubmatch(m[2]); m2 != nil {
+						str = fmt.Sprintf("%s Info MultiplayerManager.cpp:%s: %s", m[1], m2[1],
+							parseMpManagerLine(m, m2))
+					} else if strings.HasPrefix(m[2], "Info ") {
 						col = colorStdout
 					} else if strings.HasPrefix(m[2], "Error") {
 						col = colorWarn
