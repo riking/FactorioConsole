@@ -1,4 +1,5 @@
-//+build linux
+//+build unix,!darwin
+
 package console
 
 import (
