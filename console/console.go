@@ -360,6 +360,8 @@ func readToChannel(r io.Reader) (bytesCh <-chan []byte, resumeCh chan<- struct{}
 		}
 		if s.Err() != nil {
 			errChan <- s.Err()
+		} else {
+			errChan <- io.EOF
 		}
 	}(r)
 	return readChan, resumeChan, errChan
