@@ -200,7 +200,7 @@ func (f *Factorio) Run() error {
 						col = colorDebug
 					} else if strings.HasPrefix(m[2], "Hosting game at") {
 						col = colorBoldNotice
-					} else if m2 := regexpLoadingMod.FindStringSubmatch(m[2]); m != nil {
+					} else if m2 := regexpLoadingMod.FindStringSubmatch(m[2]); m2 != nil {
 						col = colorStdout
 						str = fmt.Sprintf("Loading mod %s %s (%s)",
 							colorGreen.SprintFunc()(m2[1]),
