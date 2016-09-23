@@ -1,4 +1,4 @@
-//+build unix,!darwin
+// +build linux freebsd,!darwin
 
 package console
 
