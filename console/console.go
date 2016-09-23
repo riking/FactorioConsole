@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/chzyer/readline"
 	"github.com/fatih/color"
@@ -143,8 +144,9 @@ func (f *Factorio) Run() error {
 		return errors.Wrap(err, "starting Factorio process")
 	}
 
-	f.stopWg.Add(2)
-	go f.runStdout()
+	f.stopWg.Add(3)
+	go f.runStdout(f.stdout)
+	go f.runStdout(f.stderr)
 	go f.runStdin()
 
 	hadCtrlC := false
@@ -197,6 +199,8 @@ func (f *Factorio) Run() error {
 				err = c.Extra
 				fmt.Println("output error:", err)
 				fmt.Println("did process exit?")
+			default:
+				fmt.Println("unknown cmsg id", c)
 			}
 		case r := <-f.rpcChan:
 			// TODO
@@ -208,11 +212,7 @@ func (f *Factorio) Run() error {
 		}
 	}
 
-	// Signal to goroutines to exit
-	fmt.Println("closing stopChan")
-	close(f.stopChan)
-
-	// Drain lineChan
+	// Drain stdout, stderr
 	drainDone := make(chan struct{})
 	go func() {
 		fmt.Println("draining lineChan")
@@ -226,7 +226,11 @@ func (f *Factorio) Run() error {
 				case controlMessageStderr:
 					consoleWrite(f.console.Stderr(), c.Data, colorStderr)
 				default:
-					fmt.Println("unexpected drain message", c)
+					fmt.Printf("unexpected drain message: %T %#v\n", c, c)
+				case controlInvalid:
+					// zero read on closed channel
+					fmt.Println("linechan drain done")
+					return
 				}
 			case <-drainDone:
 				fmt.Println("linechan drain done")
@@ -234,6 +238,13 @@ func (f *Factorio) Run() error {
 			}
 		}
 	}()
+
+	// Give a bit of time for stdout / stderr to finish
+	time.Sleep(200 * time.Millisecond)
+
+	// Signal to goroutines to exit
+	fmt.Println("closing stopChan")
+	close(f.stopChan)
 
 	// interrupt input reader by calling Close()
 	fmt.Println("closing console")
@@ -278,26 +289,27 @@ func fullyWrite(w io.Writer, s string) error {
 }
 
 // runStdout owns f.stdout and f.stderr
-func (f *Factorio) runStdout() {
+func (f *Factorio) runStdout(r io.ReadCloser) {
 	defer f.stopWg.Done()
 	defer fmt.Println("runStdout returning")
 
-	outReadCh, outResumeCh, outErrCh := readToChannel(f.stdout)
-	serReadCh, serResumeCh, serErrCh := readToChannel(f.stderr)
+	outReadCh, outResumeCh, outErrCh := readToChannel(r)
+	var idMsg int
+	if r == f.stdout {
+		idMsg = controlMessageStdout
+	} else {
+		idMsg = controlMessageStderr
+	}
 
 	for {
 		select {
-		case <-f.stopChan:
-			return
 		case b := <-outReadCh:
-			f.lineChan <- control{ID: controlMessageStdout, Data: string(b)}
+			f.lineChan <- control{ID: idMsg, Data: string(b)}
 			outResumeCh <- struct{}{}
-		case b := <-serReadCh:
-			f.lineChan <- control{ID: controlMessageStderr, Data: string(b)}
-			serResumeCh <- struct{}{}
 		case err := <-outErrCh:
-			f.lineChan <- control{ID: controlMessageOutputErr, Extra: err}
-		case err := <-serErrCh:
+			if err == io.EOF {
+				return
+			}
 			f.lineChan <- control{ID: controlMessageOutputErr, Extra: err}
 		}
 	}
