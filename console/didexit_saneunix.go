@@ -15,12 +15,12 @@ func waitForExit(p *os.Process) chan struct{} {
 	go func(p *os.Process, ch chan struct{}) {
 		var wstatus unix.WaitStatus
 		for {
-			_, err := unix.Wait4(p.Pid, &wstatus, unix.WNOWAIT, nil)
+			p, err := unix.Wait4(p.Pid, &wstatus, unix.WNOWAIT, nil)
 			if err == unix.EINTR {
 				continue
 			}
 			if err != nil {
-				fmt.Println(err)
+				fmt.Println("wait4 error:", p, err)
 			}
 			break
 		}
