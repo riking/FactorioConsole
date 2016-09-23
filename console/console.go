@@ -69,7 +69,9 @@ const (
 	controlMessageStdout
 	controlMessageStderr
 	controlMessageInput
-	// controlMessageInputErr has either io.EOF or readline.ErrInterrupt in Extra.
+	// controlMessageInputErr has either io.EOF, readline.ErrInterrupt, or
+	// errInputProbablyBroken in Extra.
+	//
 	// if Extra is readline.ErrInterrupt, Data has the partial string
 	controlMessageInputErr
 	// controlMessageOutputErr occurs when reading from stdout or stderr fails.
@@ -77,6 +79,8 @@ const (
 	// The error value is in Extra.
 	controlMessageOutputErr
 )
+
+var errInputProbablyBroken = errors.Errorf("got multiple io.EOFs in row")
 
 const programName = `bin/x64/factorio`
 
@@ -175,6 +179,10 @@ func (f *Factorio) Run() error {
 					consoleWrite(f.console.Stderr(), color.YellowString("got EOF, ignoring\n"))
 					// TODO verify
 					// ignore
+				} else if c.Extra == errInputProbablyBroken {
+					consoleWrite(f.console.Stderr(), color.YellowString("Exiting\n"))
+					closeConsole()
+					go f.StopServer()
 				}
 			case controlMessageOutputErr:
 				err = c.Extra
@@ -250,6 +258,19 @@ func (f *Factorio) runStdout() {
 	}
 }
 
+// runStdin owns os.Stdin (which is f.console)
+func (f *Factorio) runStdin() {
+	defer f.stopWg.Done()
+
+	ch := readlineToChannel(f.console, f.stopChan)
+	for {
+		select {
+		case f.lineChan <- <-ch:
+		case <-f.stopChan:
+		}
+	}
+}
+
 // readToChannel splits the reader into lines and sends each line down bytesCh
 // on a new goroutine.
 //
@@ -276,22 +297,35 @@ func readToChannel(r io.Reader) (bytesCh <-chan []byte, resumeCh chan<- struct{}
 	return readChan, resumeChan, errChan
 }
 
-// runStdin owns os.Stdin (which is f.console)
-func (f *Factorio) runStdin() {
-	defer f.stopWg.Done()
-
-	for {
-		str, err := f.console.Readline()
-		if err == nil {
-			f.lineChan <- control{ID: controlMessageInput, Data: str}
-		} else {
-			f.lineChan <- control{ID: controlMessageInputErr, Data: str, Extra: err}
+// we can't tell the difference between a ^D and input.Close()
+// so if we get a bunch of EOFs, mark input as "probably broken"
+func readlineToChannel(r *readline.Instance, stop chan struct{}) chan control {
+	ch := make(chan control)
+	go func(r *readline.Instance) {
+		eofCount := 0
+		for {
+			str, err := r.Readline()
+			if err == nil {
+				eofCount = 0
+				select {
+				case ch <- control{ID: controlMessageInput, Data: str}:
+				case <-stop:
+					return
+				}
+			} else {
+				if err == io.EOF {
+					eofCount++
+					if eofCount > 4 {
+						err = errInputProbablyBroken
+					}
+				}
+				select {
+				case ch <- control{ID: controlMessageInputErr, Data: str, Extra: err}:
+				case <-stop:
+					return
+				}
+			}
 		}
-		select {
-		case <-f.stopChan:
-			return
-		default:
-			// loop
-		}
-	}
+	}(r)
+	return ch
 }
