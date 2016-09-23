@@ -197,10 +197,13 @@ func (f *Factorio) Run() error {
 		}
 		if processExited {
 			// Signal to goroutines to exit
+			fmt.Println("closing stopChan")
 			close(f.stopChan)
 			// interrupt input reader by calling Close()
+			fmt.Println("closing console")
 			closeConsole()
 			// Wait for goroutines to exit
+			fmt.Println("wg.Wait")
 			f.stopWg.Wait()
 			break
 		}
@@ -236,6 +239,7 @@ func fullyWrite(w io.Writer, s string) error {
 // runStdout owns f.stdout and f.stderr
 func (f *Factorio) runStdout() {
 	defer f.stopWg.Done()
+	defer fmt.Println("runStdout returning")
 
 	outReadCh, outResumeCh, outErrCh := readToChannel(f.stdout)
 	serReadCh, serResumeCh, serErrCh := readToChannel(f.stderr)
@@ -261,6 +265,7 @@ func (f *Factorio) runStdout() {
 // runStdin owns os.Stdin (which is f.console)
 func (f *Factorio) runStdin() {
 	defer f.stopWg.Done()
+	defer fmt.Println("runStdin returning")
 
 	ch := readlineToChannel(f.console, f.stopChan)
 	for {
@@ -281,6 +286,8 @@ func (f *Factorio) runStdin() {
 // At io.EOF or any other error, the error will be sent on errCh and the
 // goroutine will exit.
 func readToChannel(r io.Reader) (bytesCh <-chan []byte, resumeCh chan<- struct{}, errCh <-chan error) {
+	defer fmt.Println("readToChannel returning")
+
 	readChan := make(chan []byte)
 	resumeChan := make(chan struct{})
 	errChan := make(chan error)
@@ -300,6 +307,8 @@ func readToChannel(r io.Reader) (bytesCh <-chan []byte, resumeCh chan<- struct{}
 // we can't tell the difference between a ^D and input.Close()
 // so if we get a bunch of EOFs, mark input as "probably broken"
 func readlineToChannel(r *readline.Instance, stop chan struct{}) chan control {
+	defer fmt.Println("readlineToChannel returning")
+
 	ch := make(chan control)
 	go func(r *readline.Instance) {
 		eofCount := 0
