@@ -15,19 +15,21 @@ func parseMpManagerLine(match []string, match2 []string) string {
 	if match3 := regexpMpManTick.FindStringSubmatch(match2[2]); match3 != nil {
 		var string4 string = match3[3]
 		if match4 := regexpMpManTickState.FindStringSubmatch(match3[3]); match4 != nil {
-			string4 = colorDebug.SprintFunc()(
-				fmt.Sprintf("changing state from(%s) to(%s)",
-					color.New(color.FgGreen, color.Bold).SprintFunc()(match4[1]),
-					color.New(color.FgGreen, color.Bold).SprintFunc()(match4[2]),
-				),
+			string4 = fmt.Sprintf("%s%s%s%s%s",
+				colorDebug.SprintFunc()("changing state from("),
+				color.New(color.FgGreen, color.Bold).SprintFunc()(match4[1]),
+				colorDebug.SprintFunc()(") to("),
+				color.New(color.FgGreen, color.Bold).SprintFunc()(match4[2]),
+				colorDebug.SprintFunc()(")"),
 			)
 		}
-		string3 = colorDebug.SprintFunc()(
-			fmt.Sprintf("networkTick(%s) mapTick(%s) %s",
-				colorStdout.SprintFunc()(match3[1]),
-				colorStdout.SprintFunc()(match3[2]),
-				string4,
-			),
+		string3 = fmt.Sprintf("%s%s%s%s%s",
+			colorDebug.SprintFunc()("networkTick("),
+			colorStdout.SprintFunc()(match3[1]),
+			colorDebug.SprintFunc()(") mapTick("),
+			colorStdout.SprintFunc()(match3[2]),
+			colorDebug.SprintFunc()(") "),
+			string4,
 		)
 	}
 	return string3
