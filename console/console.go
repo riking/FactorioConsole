@@ -202,7 +202,7 @@ func (f *Factorio) Run() error {
 						col = colorBoldNotice
 					} else if m2 := regexpLoadingMod.FindStringSubmatch(m[2]); m2 != nil {
 						col = colorStdout
-						str = fmt.Sprintf("Loading mod %s %s (%s)",
+						str = fmt.Sprintf("%s Loading mod %s %s (%s)", m[1],
 							colorGreen.SprintFunc()(m2[1]),
 							colorBoldNotice.SprintFunc()(m2[2]),
 							colorDebug.SprintFunc()(m2[3]),
