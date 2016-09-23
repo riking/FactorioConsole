@@ -294,7 +294,14 @@ func (f *Factorio) runStdin() {
 	ch := readlineToChannel(f.console, f.stopChan)
 	for {
 		select {
-		case f.lineChan <- <-ch:
+		case msg := <-ch:
+			// Split this into two selects so that stopChan works
+			// if we drop a line, that's not a big deal
+			select {
+			case f.lineChan <- msg:
+			case <-f.stopChan:
+				return
+			}
 		case <-f.stopChan:
 			return
 		}
