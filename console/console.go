@@ -118,6 +118,8 @@ func (f *Factorio) Setup(c *Config) error {
 	return nil
 }
 
+var regexpChatMessage = regexp.MustCompile(`^\d{4}-\d{2}-\d{2} \d\d:\d\d:\d\d \[(\w+)\] (.*)$`)
+
 func (f *Factorio) Run() error {
 	var err error
 	f.console, err = readline.NewEx(f.rlConfig)
@@ -134,7 +136,7 @@ func (f *Factorio) Run() error {
 	consoleWrite := func(w io.Writer, s string, c *color.Color) {
 		err = fullyWrite(w, c.SprintlnFunc()(s))
 		if err != nil {
-			fmt.Println("output pipe broken")
+			fmt.Println("output pipe broken", err)
 			ourOutputBroken = true
 		}
 	}
@@ -154,7 +156,7 @@ func (f *Factorio) Run() error {
 	didExit := waitForExit(f.process.Process)
 
 	colorStdout := color.New(color.FgHiWhite)
-	colorStatus := color.New(color.FgWhite)
+	colorPlain := color.New()
 	colorWarn := color.New(color.FgYellow)
 	colorStderr := color.New(color.FgRed)
 
@@ -162,12 +164,16 @@ func (f *Factorio) Run() error {
 		select {
 		case <-didExit:
 			// TODO timestamp?
-			consoleWrite(f.console.Stderr(), "Factorio server exited", colorStatus)
+			consoleWrite(f.console.Stderr(), "Factorio server exited", colorWarn)
 			processExited = true
 		case c := <-f.lineChan:
 			switch c.ID {
 			case controlMessageStdout:
-				consoleWrite(f.console.Stdout(), c.Data, colorStdout)
+				if regexpChatMessage.MatchString(c.Data) {
+					consoleWrite(f.console.Stdout(), c.Data, colorPlain)
+				} else {
+					consoleWrite(f.console.Stdout(), c.Data, colorStdout)
+				}
 			case controlMessageStderr:
 				consoleWrite(f.console.Stderr(), c.Data, colorStderr)
 			case controlMessageInput:
