@@ -23,7 +23,7 @@ func parseMpManagerLine(match []string, match2 []string) string {
 				colorDebug.SprintFunc()(")"),
 			)
 		}
-		string3 = fmt.Sprintf("%s%s%s%s%s",
+		string3 = fmt.Sprintf("%s%s%s%s%s%s",
 			colorDebug.SprintFunc()("networkTick("),
 			colorStdout.SprintFunc()(match3[1]),
 			colorDebug.SprintFunc()(") mapTick("),
