@@ -345,12 +345,11 @@ func (f *Factorio) runStdin() {
 // At io.EOF or any other error, the error will be sent on errCh and the
 // goroutine will exit.
 func readToChannel(r io.Reader) (bytesCh <-chan []byte, resumeCh chan<- struct{}, errCh <-chan error) {
-	defer fmt.Println("readToChannel returning")
-
 	readChan := make(chan []byte)
 	resumeChan := make(chan struct{})
 	errChan := make(chan error)
 	go func(r io.Reader) {
+		defer fmt.Println("readToChannel returning")
 		s := bufio.NewScanner(r)
 		for s.Scan() {
 			readChan <- s.Bytes()
@@ -368,10 +367,10 @@ func readToChannel(r io.Reader) (bytesCh <-chan []byte, resumeCh chan<- struct{}
 // we can't tell the difference between a ^D and input.Close()
 // so if we get a bunch of EOFs, mark input as "probably broken"
 func readlineToChannel(r *readline.Instance, stop chan struct{}) chan control {
-	defer fmt.Println("readlineToChannel returning")
-
 	ch := make(chan control)
+
 	go func(r *readline.Instance) {
+		defer fmt.Println("readlineToChannel returning")
 		eofCount := 0
 		for {
 			str, err := r.Readline()
@@ -379,6 +378,7 @@ func readlineToChannel(r *readline.Instance, stop chan struct{}) chan control {
 				eofCount = 0
 				select {
 				case ch <- control{ID: controlMessageInput, Data: str}:
+					continue
 				case <-stop:
 					return
 				}
@@ -391,6 +391,7 @@ func readlineToChannel(r *readline.Instance, stop chan struct{}) chan control {
 				}
 				select {
 				case ch <- control{ID: controlMessageInputErr, Data: str, Extra: err}:
+					continue
 				case <-stop:
 					return
 				}
