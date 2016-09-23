@@ -131,6 +131,7 @@ func (f *Factorio) Run() error {
 	ourOutputBroken := false
 
 	consoleWrite := func(w io.Writer, s string) {
+		s = strings.TrimRight(s, "\n") + "\n"
 		err = fullyWrite(w, s)
 		if err != nil {
 			fmt.Println("output pipe broken")
