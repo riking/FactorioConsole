@@ -155,8 +155,8 @@ func (f *Factorio) Run() error {
 	processExited := false
 	didExit := waitForExit(f.process.Process)
 
-	colorStdout := color.New(color.FgHiWhite)
-	colorPlain := color.New()
+	colorStdout := color.New(color.FgWhite)
+	colorChat := color.New(color.FgHiBlue)
 	colorWarn := color.New(color.FgYellow)
 	colorStderr := color.New(color.FgRed)
 
