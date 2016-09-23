@@ -150,7 +150,7 @@ func (f *Factorio) Run() error {
 
 	hadCtrlC := false
 
-	for {
+	for !processExited {
 		select {
 		case c := <-f.lineChan:
 			switch c.ID {
@@ -195,46 +195,49 @@ func (f *Factorio) Run() error {
 			_ = r
 			r.Return <- "ErrNotImplemented"
 		}
-		if processExited {
-			// Signal to goroutines to exit
-			fmt.Println("closing stopChan")
-			close(f.stopChan)
-
-			// Drain lineChan
-			drainDone := make(chan struct{})
-			go func() {
-				for {
-					select {
-					case c := <-f.lineChan:
-						switch c.ID {
-						case controlMessageStdout:
-							consoleWrite(f.console.Stdout(), color.WhiteString(c.Data))
-						case controlMessageStderr:
-							consoleWrite(f.console.Stderr(), color.RedString(c.Data))
-						default:
-							fmt.Println("unexpected drain message", c)
-						}
-					case <-drainDone:
-						fmt.Println("linechan drain done")
-						return
-					}
-				}
-			}()
-
-			// interrupt input reader by calling Close()
-			fmt.Println("closing console")
-			closeConsole()
-
-			// Wait for goroutines to exit
-			fmt.Println("wg.Wait")
-			f.stopWg.Wait()
-			close(drainDone)
-			break
-		}
 		if ourOutputBroken {
 			go f.StopServer()
 		}
 	}
+
+	// Signal to goroutines to exit
+	fmt.Println("closing stopChan")
+	close(f.stopChan)
+
+	// Drain lineChan
+	drainDone := make(chan struct{})
+	go func() {
+		fmt.Println("draining lineChan")
+		defer fmt.Println("drain done")
+		for {
+			select {
+			case c := <-f.lineChan:
+				switch c.ID {
+				case controlMessageStdout:
+					consoleWrite(f.console.Stdout(), color.WhiteString(c.Data))
+				case controlMessageStderr:
+					consoleWrite(f.console.Stderr(), color.RedString(c.Data))
+				default:
+					fmt.Println("unexpected drain message", c)
+				}
+			case <-drainDone:
+				fmt.Println("linechan drain done")
+				return
+			}
+		}
+	}()
+
+	// interrupt input reader by calling Close()
+	fmt.Println("closing console")
+	closeConsole()
+
+	// Wait for goroutines to exit
+	fmt.Println("wg.Wait")
+	f.stopWg.Wait()
+	close(drainDone)
+	close(f.lineChan)
+
+	// Fetch process return code, don't leave zombies
 	fmt.Println("collecting return code")
 	fmt.Println(f.process.Wait())
 	return nil
