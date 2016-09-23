@@ -119,7 +119,8 @@ func (f *Factorio) Setup(c *Config) error {
 	return nil
 }
 
-var regexpChatMessage = regexp.MustCompile(`^\d{4}-\d{2}-\d{2} \d\d:\d\d:\d\d \[(\w+)\] (.*)$`)
+var regexpChatMessage = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d\d:\d\d:\d\d) \[(\w+)\] (.*)$`)
+var regexpLogMessage = regexp.MustCompile(`^([ \d]+\.\d{3}) (.*)$`)
 
 func (f *Factorio) Run() error {
 	var err error
@@ -157,7 +158,9 @@ func (f *Factorio) Run() error {
 	didExit := waitForExit(f.process.Process)
 
 	colorStdout := color.New(color.FgWhite)
+	colorNotice := color.New(color.FgHiWhite)
 	colorChat := color.New(color.FgHiBlue)
+	colorCommand := color.New(color.FgMagenta)
 	colorWarn := color.New(color.FgYellow)
 	colorStderr := color.New(color.FgRed)
 
@@ -170,8 +173,24 @@ func (f *Factorio) Run() error {
 		case c := <-f.lineChan:
 			switch c.ID {
 			case controlMessageStdout:
-				if regexpChatMessage.MatchString(c.Data) {
-					consoleWrite(f.console.Stdout(), c.Data, colorChat)
+				if m := regexpChatMessage.FindStringSubmatch(c.Data); m != nil {
+					col := colorNotice // TODO colorChat
+					if m[2] == "COMMAND" {
+						col = colorCommand
+					} else if m[2] == "WARNING" {
+						col = colorWarn
+					} else if m[2] == "CHAT" {
+						col = colorChat
+					}
+					consoleWrite(f.console.Stdout(), c.Data, col)
+				} else if m := regexpLogMessage.FindStringSubmatch(c.Data); m != nil {
+					col := colorNotice
+					if strings.HasPrefix(m[2], "Info ") {
+						col := colorStdout
+					} else if strings.HasPrefix(m[2], "Error") {
+						col := colorWarn
+					}
+					consoleWrite(f.console.Stdout(), c.Data, col)
 				} else {
 					consoleWrite(f.console.Stdout(), c.Data, colorStdout)
 				}
@@ -185,20 +204,15 @@ func (f *Factorio) Run() error {
 					fmt.Println("did process exit?")
 				}
 			case controlMessageInputErr:
-				// TODO verify
-				if c.Extra == readline.ErrInterrupt {
+				if c.Extra == readline.ErrInterrupt || c.Extra == io.EOF {
 					if hadCtrlC {
 						go f.StopServer()
 					} else {
-						consoleWrite(f.console.Stderr(), "Use 'stop' or ^C again to halt the server.\n", colorWarn)
+						consoleWrite(f.console.Stderr(), "Caught ^C. Use 'stop' or ^C again to halt the server.", colorWarn)
 						hadCtrlC = true
 					}
-				} else if c.Extra == io.EOF {
-					consoleWrite(f.console.Stderr(), "got EOF, ignoring\n", colorWarn)
-					// TODO verify
-					// ignore
 				} else if c.Extra == errInputProbablyBroken {
-					consoleWrite(f.console.Stderr(), "Exiting\n", colorWarn)
+					consoleWrite(f.console.Stderr(), "Exiting", colorWarn)
 					closeConsole()
 					go f.StopServer()
 				}
