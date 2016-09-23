@@ -121,7 +121,7 @@ func (f *Factorio) Setup(c *Config) error {
 
 var regexpChatMessage = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d\d:\d\d:\d\d) \[(\w+)\] (.*)$`)
 var regexpLogMessage = regexp.MustCompile(`^([ \d]+\.\d{3}) (.*)$`)
-var regexpLoadingMod = regexp.MustCompile(`Loading mod ([a-zA-Z0-9 _-]+) (\d+\.\d+\.\d+) \((\w+\.lua)\)`)
+var regexpLoadingMod = regexp.MustCompile(`Loading mod ([a-zA-Z0-9 _-]+) (\d+\.\d+\.\d+) \(([\w_-]+\.lua)\)`)
 
 func (f *Factorio) Run() error {
 	var err error
