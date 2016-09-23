@@ -255,12 +255,18 @@ func (f *Factorio) sendCommand(cmd string) error {
 }
 
 func fullyWrite(w io.Writer, s string) error {
-	bw := bufio.NewWriter(w)
-	_, err := bw.WriteString(s)
-	if err != nil {
-		return err
+	b := []byte(s)
+	lenLeft := len(s)
+	offset := 0
+	for lenLeft > 0 {
+		n, err := w.Write(b[offset:])
+		if err != nil {
+			return err
+		}
+		lenLeft -= n
+		offset += n
 	}
-	return bw.Flush()
+	return nil
 }
 
 // runStdout owns f.stdout and f.stderr
