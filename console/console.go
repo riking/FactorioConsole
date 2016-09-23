@@ -22,11 +22,12 @@ type Config struct {
 }
 
 type Factorio struct {
-	console *readline.Instance
-	process *exec.Cmd
-	stdin   io.WriteCloser
-	stdout  io.ReadCloser
-	stderr  io.ReadCloser
+	rlConfig *readline.Config
+	console  *readline.Instance
+	process  *exec.Cmd
+	stdin    io.WriteCloser
+	stdout   io.ReadCloser
+	stderr   io.ReadCloser
 
 	// lineChan is sent from the stdin, stdout, and stderr goroutines to the
 	// coordinator goroutine
@@ -35,8 +36,8 @@ type Factorio struct {
 	// stdout, and stderr goroutines to shut down
 	stopChan chan (struct{})
 	stopWg   sync.WaitGroup
-
-	RPCChan chan Request
+	// rpcChan is written from the GRPC thread
+	rpcChan chan Request
 }
 
 type Request struct {
@@ -91,10 +92,7 @@ func (f *Factorio) Start(c *Config) error {
 // Setup prepares readline and the process for a call to Run().
 func (f *Factorio) Setup(c *Config) error {
 	var err error
-	f.console, err = readline.NewEx(c.RLConfig)
-	if err != nil {
-		return errors.Wrap(err, "starting readline - is your terminal set up wrong?")
-	}
+	f.rlConfig = c.RLConfig
 	f.process = exec.Command(programName, c.Args...)
 	f.stdin, err = f.process.StdinPipe()
 	if err != nil {
@@ -110,19 +108,23 @@ func (f *Factorio) Setup(c *Config) error {
 	}
 	f.lineChan = make(chan control)
 	f.stopChan = make(chan struct{})
-	f.RPCChan = make(chan Request)
+	f.rpcChan = make(chan Request)
+	// TODO grpc
 	return nil
 }
 
 func (f *Factorio) Run() error {
-	f.stopWg.Add(2)
-	go f.runStdout()
-	go f.runStdin()
-
 	var err error
-	processExited := false
+	f.console, err = readline.NewEx(f.rlConfig)
+	if err != nil {
+		return errors.Wrap(err, "starting readline - is your terminal set up wrong?")
+	}
+	closeConsole := wrapOnce(func() {
+		f.console.Close()
+	})
+	defer closeConsole()
+
 	ourOutputBroken := false
-	hadCtrlC := false
 
 	consoleWrite := func(w io.Writer, s string) {
 		err = fullyWrite(w, s)
@@ -131,6 +133,18 @@ func (f *Factorio) Run() error {
 			ourOutputBroken = true
 		}
 	}
+
+	err = f.process.Start()
+	if err != nil {
+		return errors.Wrap(err, "starting Factorio process")
+	}
+	processExited := false
+
+	f.stopWg.Add(2)
+	go f.runStdout()
+	go f.runStdin()
+
+	hadCtrlC := false
 
 	for {
 		select {
@@ -168,15 +182,16 @@ func (f *Factorio) Run() error {
 				fmt.Println("marking process as exited")
 				processExited = true
 			}
-		case r := <-f.RPCChan:
+		case r := <-f.rpcChan:
 			// TODO
 			_ = r
+			r.Return <- "ErrNotImplemented"
 		}
 		if processExited {
 			// Signal to goroutines to exit
 			close(f.stopChan)
 			// interrupt input reader by calling Close()
-			f.console.Close()
+			closeConsole()
 			// Wait for goroutines to exit
 			f.stopWg.Wait()
 			break
