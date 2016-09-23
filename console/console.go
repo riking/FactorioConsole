@@ -199,12 +199,36 @@ func (f *Factorio) Run() error {
 			// Signal to goroutines to exit
 			fmt.Println("closing stopChan")
 			close(f.stopChan)
+
+			// Drain lineChan
+			drainDone := make(chan struct{})
+			go func() {
+				for {
+					select {
+					case c := <-f.lineChan:
+						switch c.ID {
+						case controlMessageStdout:
+							consoleWrite(f.console.Stdout(), color.WhiteString(c.Data))
+						case controlMessageStderr:
+							consoleWrite(f.console.Stderr(), color.RedString(c.Data))
+						default:
+							fmt.Println("unexpected drain message", c)
+						}
+					case <-drainDone:
+						fmt.Println("linechan drain done")
+						return
+					}
+				}
+			}()
+
 			// interrupt input reader by calling Close()
 			fmt.Println("closing console")
 			closeConsole()
+
 			// Wait for goroutines to exit
 			fmt.Println("wg.Wait")
 			f.stopWg.Wait()
+			close(drainDone)
 			break
 		}
 		if ourOutputBroken {
